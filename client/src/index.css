@@ -1,0 +1,129 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* Base colors */
+  --background: hsl(0, 0%, 100%);
+  --foreground: hsl(20, 14.3%, 4.1%);
+  --muted: hsl(60, 4.8%, 95.9%);
+  --muted-foreground: hsl(25, 5.3%, 44.7%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(20, 14.3%, 4.1%);
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(20, 14.3%, 4.1%);
+  --border: hsl(20, 5.9%, 90%);
+  --input: hsl(20, 5.9%, 90%);
+  
+  /* PSS Brand colors */
+  --primary: hsl(220, 91%, 54%);
+  --primary-foreground: hsl(210, 100%, 98%);
+  --secondary: hsl(60, 4.8%, 95.9%);
+  --secondary-foreground: hsl(24, 9.8%, 10%);
+  --accent: hsl(60, 4.8%, 95.9%);
+  --accent-foreground: hsl(24, 9.8%, 10%);
+  --destructive: hsl(0, 84.2%, 60.2%);
+  --destructive-foreground: hsl(60, 9.1%, 97.8%);
+  --ring: hsl(20, 14.3%, 4.1%);
+  
+  /* PSS specific colors */
+  --pss-blue: hsl(220, 91%, 54%);
+  --pss-green: hsl(158, 64%, 52%);
+  --pss-red: hsl(0, 73%, 51%);
+  --pss-gray: hsl(215, 20%, 65%);
+  
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: hsl(240, 10%, 3.9%);
+  --foreground: hsl(0, 0%, 98%);
+  --muted: hsl(240, 3.7%, 15.9%);
+  --muted-foreground: hsl(240, 5%, 64.9%);
+  --popover: hsl(240, 10%, 3.9%);
+  --popover-foreground: hsl(0, 0%, 98%);
+  --card: hsl(240, 10%, 3.9%);
+  --card-foreground: hsl(0, 0%, 98%);
+  --border: hsl(240, 3.7%, 15.9%);
+  --input: hsl(240, 3.7%, 15.9%);
+  --primary: hsl(220, 91%, 54%);
+  --primary-foreground: hsl(210, 100%, 98%);
+  --secondary: hsl(240, 3.7%, 15.9%);
+  --secondary-foreground: hsl(0, 0%, 98%);
+  --accent: hsl(240, 3.7%, 15.9%);
+  --accent-foreground: hsl(0, 0%, 98%);
+  --destructive: hsl(0, 62.8%, 30.6%);
+  --destructive-foreground: hsl(0, 0%, 98%);
+  --ring: hsl(240, 4.9%, 83.9%);
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-weight: 600;
+  }
+}
+
+@layer components {
+  .gradient-hero {
+    background: linear-gradient(135deg, hsl(220, 91%, 54%) 0%, hsl(234, 85%, 45%) 100%);
+  }
+  
+  .gradient-card {
+    background: linear-gradient(135deg, hsl(0, 0%, 98%) 0%, hsl(240, 5%, 92%) 100%);
+  }
+  
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}
+
+@layer utilities {
+  .text-pss-blue {
+    color: var(--pss-blue);
+  }
+  
+  .text-pss-green {
+    color: var(--pss-green);
+  }
+  
+  .text-pss-red {
+    color: var(--pss-red);
+  }
+  
+  .text-pss-gray {
+    color: var(--pss-gray);
+  }
+  
+  .bg-pss-blue {
+    background-color: var(--pss-blue);
+  }
+  
+  .bg-pss-green {
+    background-color: var(--pss-green);
+  }
+  
+  .bg-pss-red {
+    background-color: var(--pss-red);
+  }
+  
+  .bg-pss-gray {
+    background-color: var(--pss-gray);
+  }
+  
+  .border-pss-blue {
+    border-color: var(--pss-blue);
+  }
+}
