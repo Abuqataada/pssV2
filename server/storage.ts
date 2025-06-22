@@ -4,6 +4,8 @@ import {
   referrals,
   withdrawalRequests,
   transactions,
+  categoryUpgrades,
+  analyticsEvents,
   type User,
   type InsertUser,
   type InvestmentPackage,
@@ -14,7 +16,7 @@ import {
   type Transaction,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, sum, sql } from "drizzle-orm";
+import { eq, and, desc, sum, sql, gte, lte } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 export interface IStorage {
@@ -66,6 +68,12 @@ export interface IStorage {
     pendingWithdrawals: number;
     monthlyGrowth: number;
   }>;
+  
+  // Advanced features
+  checkAndUpgradeUserCategory(userId: number): Promise<void>;
+  getReferralTree(userId: number): Promise<any>;
+  getAdvancedAnalytics(startDate?: Date, endDate?: Date): Promise<any>;
+  createAnalyticsEvent(event: { userId?: number; eventType: string; eventData?: any; ipAddress?: string; userAgent?: string }): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -296,6 +304,230 @@ export class DatabaseStorage implements IStorage {
       pendingWithdrawals: pendingWithdrawals[0]?.count || 0,
       monthlyGrowth,
     };
+  }
+
+  // Advanced features implementation
+  async checkAndUpgradeUserCategory(userId: number): Promise<void> {
+    const user = await this.getUserById(userId);
+    if (!user) return;
+
+    const totalInvestment = await db
+      .select({ sum: sql<number>`coalesce(sum(amount), 0)` })
+      .from(investmentPackages)
+      .where(eq(investmentPackages.userId, userId));
+
+    const total = Number(totalInvestment[0]?.sum || 0);
+    
+    const upgradeThresholds = {
+      bronze: { threshold: 0, next: null },
+      silver: { threshold: 10000, next: 'silver' },
+      gold: { threshold: 50000, next: 'gold' },
+      platinum: { threshold: 200000, next: 'platinum' },
+      diamond: { threshold: 1000000, next: 'diamond' },
+      elite: { threshold: 10000000, next: 'elite' }
+    };
+
+    const currentCategory = user.category;
+    let newCategory = currentCategory;
+
+    for (const [category, config] of Object.entries(upgradeThresholds)) {
+      if (total >= config.threshold && config.next && 
+          this.getCategoryLevel(config.next) > this.getCategoryLevel(currentCategory)) {
+        newCategory = config.next;
+      }
+    }
+
+    if (newCategory !== currentCategory) {
+      await this.updateUser(userId, { category: newCategory });
+      
+      await db.insert(categoryUpgrades).values({
+        userId,
+        fromCategory: currentCategory,
+        toCategory: newCategory,
+        upgradeReason: `Automatic upgrade based on total investment of ₦${total.toLocaleString()}`,
+        totalInvestmentThreshold: total.toString(),
+      });
+    }
+  }
+
+  async getReferralTree(userId: number): Promise<any> {
+    const user = await this.getUserById(userId);
+    if (!user) return null;
+
+    const buildTree = async (nodeUserId: number, depth = 0): Promise<any> => {
+      if (depth > 5) return null; // Prevent infinite recursion
+
+      const nodeUser = await this.getUserById(nodeUserId);
+      if (!nodeUser) return null;
+
+      const directReferrals = await db
+        .select({
+          id: users.id,
+          fullName: users.fullName,
+          category: users.category,
+          createdAt: users.createdAt,
+        })
+        .from(users)
+        .where(eq(users.referredBy, nodeUser.referralCode || ''));
+
+      const children = await Promise.all(
+        directReferrals.map(ref => buildTree(ref.id, depth + 1))
+      );
+
+      return {
+        id: nodeUser.id,
+        name: nodeUser.fullName,
+        category: nodeUser.category,
+        referralCode: nodeUser.referralCode,
+        joinDate: nodeUser.createdAt,
+        children: children.filter(Boolean),
+        stats: {
+          directReferrals: directReferrals.length,
+          totalDownline: await this.getTotalDownlineCount(nodeUserId),
+        }
+      };
+    };
+
+    return await buildTree(userId);
+  }
+
+  async getAdvancedAnalytics(startDate?: Date, endDate?: Date): Promise<any> {
+    const start = startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const end = endDate || new Date();
+
+    const [
+      userGrowth,
+      investmentTrends,
+      categoryDistribution,
+      topReferrers,
+      revenueAnalytics
+    ] = await Promise.all([
+      this.getUserGrowthAnalytics(start, end),
+      this.getInvestmentTrends(start, end),
+      this.getCategoryDistribution(),
+      this.getTopReferrers(),
+      this.getRevenueAnalytics(start, end)
+    ]);
+
+    return {
+      userGrowth,
+      investmentTrends,
+      categoryDistribution,
+      topReferrers,
+      revenueAnalytics,
+      period: { start, end }
+    };
+  }
+
+  async createAnalyticsEvent(event: { 
+    userId?: number; 
+    eventType: string; 
+    eventData?: any; 
+    ipAddress?: string; 
+    userAgent?: string 
+  }): Promise<void> {
+    await db.insert(analyticsEvents).values({
+      userId: event.userId || null,
+      eventType: event.eventType,
+      eventData: event.eventData || null,
+      ipAddress: event.ipAddress || null,
+      userAgent: event.userAgent || null,
+    });
+  }
+
+  // Helper methods for analytics
+  private async getUserGrowthAnalytics(start: Date, end: Date) {
+    const daily = await db
+      .select({
+        date: sql<string>`DATE(created_at)`,
+        count: sql<number>`count(*)`
+      })
+      .from(users)
+      .where(and(gte(users.createdAt, start), lte(users.createdAt, end)))
+      .groupBy(sql`DATE(created_at)`)
+      .orderBy(sql`DATE(created_at)`);
+
+    return daily;
+  }
+
+  private async getInvestmentTrends(start: Date, end: Date) {
+    const trends = await db
+      .select({
+        date: sql<string>`DATE(created_at)`,
+        totalAmount: sql<number>`sum(CAST(amount AS DECIMAL))`,
+        count: sql<number>`count(*)`
+      })
+      .from(investmentPackages)
+      .where(and(gte(investmentPackages.createdAt, start), lte(investmentPackages.createdAt, end)))
+      .groupBy(sql`DATE(created_at)`)
+      .orderBy(sql`DATE(created_at)`);
+
+    return trends;
+  }
+
+  private async getCategoryDistribution() {
+    const distribution = await db
+      .select({
+        category: users.category,
+        count: sql<number>`count(*)`
+      })
+      .from(users)
+      .groupBy(users.category);
+
+    return distribution;
+  }
+
+  private async getTopReferrers() {
+    const topReferrers = await db
+      .select({
+        referrerId: referrals.referrerId,
+        referrerName: users.fullName,
+        referrerCategory: users.category,
+        totalReferrals: sql<number>`count(*)`,
+        totalCommissions: sql<number>`sum(CAST(commission_earned AS DECIMAL))`
+      })
+      .from(referrals)
+      .innerJoin(users, eq(referrals.referrerId, users.id))
+      .groupBy(referrals.referrerId, users.fullName, users.category)
+      .orderBy(desc(sql`count(*)`))
+      .limit(10);
+
+    return topReferrers;
+  }
+
+  private async getRevenueAnalytics(start: Date, end: Date) {
+    const revenue = await db
+      .select({
+        totalInvested: sql<number>`sum(CASE WHEN type = 'deposit' THEN CAST(amount AS DECIMAL) ELSE 0 END)`,
+        totalCommissions: sql<number>`sum(CASE WHEN type = 'commission' THEN CAST(amount AS DECIMAL) ELSE 0 END)`,
+        totalWithdrawals: sql<number>`sum(CASE WHEN type = 'withdrawal' THEN CAST(amount AS DECIMAL) ELSE 0 END)`
+      })
+      .from(transactions)
+      .where(and(gte(transactions.createdAt, start), lte(transactions.createdAt, end)));
+
+    return revenue[0] || { totalInvested: 0, totalCommissions: 0, totalWithdrawals: 0 };
+  }
+
+  private async getTotalDownlineCount(userId: number): Promise<number> {
+    const user = await this.getUserById(userId);
+    if (!user) return 0;
+
+    const directReferrals = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.referredBy, user.referralCode || ''));
+
+    let total = directReferrals.length;
+    for (const ref of directReferrals) {
+      total += await this.getTotalDownlineCount(ref.id);
+    }
+
+    return total;
+  }
+
+  private getCategoryLevel(category: string): number {
+    const levels = { bronze: 1, silver: 2, gold: 3, platinum: 4, diamond: 5, elite: 6 };
+    return levels[category as keyof typeof levels] || 0;
   }
 
   private generateReferralCode(fullName: string): string {

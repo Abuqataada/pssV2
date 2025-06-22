@@ -6,7 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useAuth, useLogout } from "@/hooks/use-auth";
-import { Users, DollarSign, Clock, TrendingUp, LogOut, User } from "lucide-react";
+import AdvancedAnalytics from "@/components/analytics/advanced-analytics";
+import { Users, DollarSign, Clock, TrendingUp, LogOut, User, BarChart3 } from "lucide-react";
 import { Link } from "wouter";
 
 export default function AdminDashboard() {
@@ -144,10 +145,14 @@ export default function AdminDashboard() {
         {/* Admin Tabs */}
         <Card>
           <Tabs defaultValue="users" className="w-full">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="users">Users</TabsTrigger>
               <TabsTrigger value="withdrawals">Withdrawals</TabsTrigger>
               <TabsTrigger value="investments">Investments</TabsTrigger>
+              <TabsTrigger value="analytics" className="flex items-center gap-2">
+                <BarChart3 className="w-4 h-4" />
+                Analytics
+              </TabsTrigger>
               <TabsTrigger value="settings">Settings</TabsTrigger>
             </TabsList>
             
@@ -265,6 +270,10 @@ export default function AdminDashboard() {
               <div className="text-center py-8 text-gray-500">
                 Investment management coming soon...
               </div>
+            </TabsContent>
+            
+            <TabsContent value="analytics">
+              <AdvancedAnalytics />
             </TabsContent>
             
             <TabsContent value="settings">

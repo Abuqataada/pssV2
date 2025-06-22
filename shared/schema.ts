@@ -75,6 +75,28 @@ export const transactions = pgTable("transactions", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// Category upgrades tracking
+export const categoryUpgrades = pgTable("category_upgrades", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  fromCategory: text("from_category").notNull(),
+  toCategory: text("to_category").notNull(),
+  upgradeReason: text("upgrade_reason").notNull(),
+  totalInvestmentThreshold: decimal("total_investment_threshold", { precision: 15, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Analytics events for tracking
+export const analyticsEvents = pgTable("analytics_events", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id),
+  eventType: text("event_type").notNull(), // login, investment, referral, withdrawal, etc.
+  eventData: jsonb("event_data"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Session storage table for authentication
 export const sessions = pgTable(
   "sessions",
@@ -125,6 +147,20 @@ export const withdrawalRequestsRelations = relations(withdrawalRequests, ({ one 
 export const transactionsRelations = relations(transactions, ({ one }) => ({
   user: one(users, {
     fields: [transactions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const categoryUpgradesRelations = relations(categoryUpgrades, ({ one }) => ({
+  user: one(users, {
+    fields: [categoryUpgrades.userId],
+    references: [users.id],
+  }),
+}));
+
+export const analyticsEventsRelations = relations(analyticsEvents, ({ one }) => ({
+  user: one(users, {
+    fields: [analyticsEvents.userId],
     references: [users.id],
   }),
 }));

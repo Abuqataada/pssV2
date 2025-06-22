@@ -6,6 +6,14 @@ import bcrypt from "bcrypt";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 
+// Extend session data interface
+declare module "express-session" {
+  interface SessionData {
+    userId: number;
+    isAdmin: boolean;
+  }
+}
+
 // Session configuration
 const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
 const pgStore = connectPg(session);
@@ -42,7 +50,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(401).json({ message: "Unauthorized" });
     }
     
-    const user = await storage.getUserById(req.session.userId);
+    const user = await storage.getUserById(req.session.userId!);
     if (!user || !user.isAdmin) {
       return res.status(403).json({ message: "Admin access required" });
     }
@@ -93,7 +101,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await storage.createReferral({
             referrerId: referrer.id,
             referredId: user.id,
-            commissionRate: commissionRates[referrer.category as keyof typeof commissionRates],
+            commissionRate: commissionRates[referrer.category as keyof typeof commissionRates].toString(),
             commissionEarned: "0",
             isActive: true,
           });
@@ -102,7 +110,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Auto-login after registration
       req.session.userId = user.id;
-      req.session.isAdmin = user.isAdmin;
+      req.session.isAdmin = user.isAdmin || false;
       
       const { password, ...userWithoutPassword } = user;
       res.json({ user: userWithoutPassword });
@@ -127,7 +135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       req.session.userId = user.id;
-      req.session.isAdmin = user.isAdmin;
+      req.session.isAdmin = user.isAdmin || false;
       
       const { password: _, ...userWithoutPassword } = user;
       res.json({ user: userWithoutPassword });
@@ -149,7 +157,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/auth/me", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUserById(req.session.userId);
+      const user = await storage.getUserById(req.session.userId!);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
@@ -182,7 +190,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create transaction record
       await storage.createTransaction({
-        userId: req.session.userId,
+        userId: req.session.userId!,
         type: "deposit",
         amount: investmentData.amount,
         reference: `INV-${investment.id}-${Date.now()}`,
@@ -190,6 +198,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: `Investment in ${investmentData.category} package`,
         metadata: { investmentId: investment.id },
       });
+
+      // Check for category upgrade eligibility
+      await storage.checkAndUpgradeUserCategory(req.session.userId!);
       
       res.json(investment);
     } catch (error: any) {
@@ -200,7 +211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/investments", requireAuth, async (req, res) => {
     try {
-      const investments = await storage.getUserInvestments(req.session.userId);
+      const investments = await storage.getUserInvestments(req.session.userId!);
       res.json(investments);
     } catch (error) {
       console.error("Get investments error:", error);
@@ -226,7 +237,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/withdrawals", requireAuth, async (req, res) => {
     try {
-      const withdrawals = await storage.getUserWithdrawals(req.session.userId);
+      const withdrawals = await storage.getUserWithdrawals(req.session.userId!);
       res.json(withdrawals);
     } catch (error) {
       console.error("Get withdrawals error:", error);
@@ -237,7 +248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Dashboard stats
   app.get("/api/dashboard/stats", requireAuth, async (req, res) => {
     try {
-      const stats = await storage.getUserStats(req.session.userId);
+      const stats = await storage.getUserStats(req.session.userId!);
       res.json(stats);
     } catch (error) {
       console.error("Get dashboard stats error:", error);
@@ -247,11 +258,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/referrals/stats", requireAuth, async (req, res) => {
     try {
-      const stats = await storage.getReferralStats(req.session.userId);
+      const stats = await storage.getReferralStats(req.session.userId!);
       res.json(stats);
     } catch (error) {
       console.error("Get referral stats error:", error);
       res.status(500).json({ message: "Failed to get referral stats" });
+    }
+  });
+
+  // Advanced features routes
+  app.get("/api/referrals/tree", requireAuth, async (req, res) => {
+    try {
+      const tree = await storage.getReferralTree(req.session.userId!);
+      res.json(tree);
+    } catch (error) {
+      console.error("Get referral tree error:", error);
+      res.status(500).json({ message: "Failed to get referral tree" });
+    }
+  });
+
+  app.get("/api/analytics/advanced", requireAdmin, async (req, res) => {
+    try {
+      const { startDate, endDate } = req.query;
+      const start = startDate ? new Date(startDate as string) : undefined;
+      const end = endDate ? new Date(endDate as string) : undefined;
+      
+      const analytics = await storage.getAdvancedAnalytics(start, end);
+      res.json(analytics);
+    } catch (error) {
+      console.error("Get advanced analytics error:", error);
+      res.status(500).json({ message: "Failed to get analytics" });
     }
   });
 
